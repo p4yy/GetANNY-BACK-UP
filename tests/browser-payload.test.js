@@ -54,9 +54,13 @@ test("browser payload transfers ordered bytes and enforces session ownership", a
   assert.deepEqual(await fs.readdir(work), []);
 });
 
-test("provider output classifiers use exact origins and include Suno direct audio", () => {
+test("provider output classifiers recognize common AI platforms and reject lookalike hosts", () => {
   assert.equal(providerFor("https://perplexity.ai/search/test"), "Perplexity");
+  assert.equal(providerFor("https://app.suno.ai/song/test"), "Suno");
+  assert.equal(providerFor("https://aistudio.google.com/prompts/new_chat"), "Google AI Studio");
+  assert.equal(providerFor("https://app.higgsfield.ai/create"), "Higgsfield");
   assert.equal(providerFor("https://claude.ai.example.com/"), null);
+  assert.equal(providerFor("https://notchatgpt.com/"), null);
   assert.equal(
     classifyOutput(
       "https://suno.com/song/test",
@@ -81,5 +85,14 @@ test("provider output classifiers use exact origins and include Suno direct audi
       "attachment",
     ).title,
     "Perplexity file",
+  );
+  assert.deepEqual(
+    classifyOutput(
+      "https://downloads.example/",
+      "https://cdn.downloads.example/app.apk",
+      "application/vnd.android.package-archive",
+      'attachment; filename="app.apk"',
+    ),
+    { kind: "file", title: "cdn.downloads.example file" },
   );
 });
