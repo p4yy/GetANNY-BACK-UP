@@ -59,13 +59,19 @@ The extension permissions support these functions:
 
 The extension does not read website passwords, modify browser profiles, change enterprise policies or silently install/update itself. The desktop bridge rejects website origins and clients without a valid capability.
 
+## Download capture
+
+The extension intercepts trusted clicks on explicit download links (the HTML `download` attribute or a clear Download/Export/Save label) before the browser starts the transfer. Direct HTTP(S) links are sent to GetANNY with the initiating page as the referrer and optional cookies for the target host. Same-origin `blob:` download links are copied from the page into GetANNY, with a 64 MiB safety limit. If GetANNY definitively refuses a direct link, the extension starts a browser-managed fallback without looping it back into GetANNY. Ambiguous acknowledgements are not duplicated; check the desktop queue before retrying.
+
+Other browser downloads are still observed through the browser Downloads API and handed off only when the browser can pause them safely. A download already completed before the extension can pause it may remain in the browser. The popup's **Automatic capture** switch and per-site **Keep in browser** exception control this behavior.
+
 ## Handoff limits
 
 - Browser APIs do not expose every original request header. GetANNY forwards only the available URL, filename, referer, user-agent and URL-matching cookies; it does not claim arbitrary-header parity.
-- Short, completed or otherwise unpausable downloads stay in the browser to avoid duplicate transfers.
+- Short, completed or otherwise unpausable downloads without an early explicit-link capture stay in the browser to avoid duplicate transfers.
 - An ambiguous handoff stays paused until transfer-ID reconciliation proves which side owns it.
 - Private-window downloads require the browser to allow the extension in private mode and expose one unambiguous private cookie store.
-- Blob URLs are not transferable files; the original page may be analyzed instead. DRM and inaccessible protected streams are unsupported.
+- Same-origin blob download links are transferable up to 64 MiB while the original page is open. Cross-origin blob URLs, oversized blobs, DRM and inaccessible protected streams are unsupported.
 - Some websites use short-lived URLs or authentication flows that cannot be resumed outside the original browser session.
 
 ## Troubleshooting

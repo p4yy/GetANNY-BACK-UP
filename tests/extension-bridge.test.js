@@ -14,3 +14,15 @@ test("native GetANNY bootstrap upgrades to direct credential only after durable 
   assert.match(source,/if \(pairingKey\) startWebSocket\(generation\)/);
   assert.match(source,/api\.storage\.local[\s\S]*\.set\([\s\S]*\.then\(\(\) =>/);
 });
+
+test("browser download handoff supports explicit links from any HTTP(S) page", () => {
+  const background = fs.readFileSync("src/extension/background.js", "utf8");
+  const content = fs.readFileSync("src/extension/content.js", "utf8");
+  assert.match(content, /document\.addEventListener\([\s\S]*"a\[href\]"/);
+  assert.match(content, /type: "browser-download-fallback"/);
+  assert.match(background, /message\.type === "browser-download-fallback"/);
+  assert.match(background, /api\.downloads\.download\(options\)/);
+  assert.match(background, /message\.type === "browser-payload"[\s\S]*validUrl\(sender\.url\)/);
+  assert.doesNotMatch(background, /!globalThis\.GetANNYSiteDownloads\.providerFor\(sender\.url\)/);
+  assert.match(background, /ambiguous: Boolean\(error\.ambiguous\)/);
+});

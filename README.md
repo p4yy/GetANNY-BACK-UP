@@ -41,7 +41,7 @@ The installer is unsigned unless the release's Authenticode evidence says otherw
 - **File downloads:** HTTP and HTTPS transfers with progress, pause, resume, retry, per-download limits and searchable local history.
 - **Media Studio:** inspect supported media pages, select available formats, download provided subtitles or thumbnails, and choose a video time range.
 - **Torrents:** add magnet links, local `.torrent` files or supported `.torrent` URLs. WebTorrent is the active transfer engine; results depend on reachable peers and seeders.
-- **Browser handoff:** send supported downloads from Chromium-family browsers and Firefox through an authenticated local connection. Extension installation and permissions always require your approval.
+- **Browser handoff:** capture explicit file-download links before the browser starts, transfer supported same-origin generated files, and hand off other pausable downloads through an authenticated local connection. Extension installation and permissions always require your approval.
 - **Workspace controls:** themes, interface languages, scheduling, speed limits, notifications and tray behavior.
 
 GetANNY does not bypass DRM, site access restrictions or authentication requirements. Media availability depends on the source and the tools it permits.

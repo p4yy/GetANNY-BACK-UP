@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.6.6 — 2026-11-21
+
+- Intercept explicit HTTP(S) download links before the browser starts the transfer, with a controlled browser fallback when GetANNY definitively refuses the request.
+- Transfer same-origin generated blob downloads from any HTTP(S) page instead of restricting them to a short AI-provider allowlist.
+- Expand AI platform recognition and classify ordinary attachment responses from any website.
+- Preserve ambiguous handoffs without launching duplicate browser downloads.
+
 ## 2.6.5 — 2026-11-19
 
 - Gave the trim editor its own view with one set of download and close controls.
