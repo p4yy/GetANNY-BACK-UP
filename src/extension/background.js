@@ -813,18 +813,35 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
       return { success: true };
     }
     if (message.type === "browser-payload" && !ui) {
-      if (
-        !sender.tab ||
-        sender.tab.incognito ||
-        !globalThis.GetANNYSiteDownloads.providerFor(sender.url)
-      )
+      const page = validUrl(sender.url)
+        ? sender.url
+        : validUrl(sender.tab?.url)
+          ? sender.tab.url
+          : null;
+      if (!sender.tab || sender.tab.incognito || !page)
         throw new Error("This page cannot send a browser file to GetANNY.");
       return request({
         ...message,
-        page: sender.url,
+        page,
         tabId: sender.tab.id,
         frameId: sender.frameId,
       });
+    }
+    if (message.type === "browser-download-fallback" && !ui) {
+      if (!sender.tab || !validUrl(sender.url) || !validUrl(message.url))
+        throw new Error("A browser download must come from an HTTP(S) page.");
+      const filename = typeof message.filename === "string"
+        ? message.filename.split(/[\\/]/).filter(Boolean).at(-1)
+            ?.replace(/[<>:"|?*\x00-\x1f]/g, "_").slice(0, 180)
+        : "";
+      const options = {
+        url: message.url,
+        saveAs: false,
+        conflictAction: "uniquify",
+      };
+      if (filename) options.filename = filename;
+      const downloadId = await api.downloads.download(options);
+      return { success: Number.isInteger(downloadId), browserManaged: true };
     }
     if (message.type === "social-batch" && ui) {
       const tab = await api.tabs.get(message.tabId);
@@ -869,22 +886,24 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === "download") {
       if (!validUrl(message.url))
         throw new Error(
-          "Only HTTP and HTTPS downloads are supported. Blob URLs must be analyzed using the original media page.",
+          "Only HTTP and HTTPS downloads are supported. Blob URLs must be transferred from their original page.",
         );
+      const sourceUrl = validUrl(sender.url)
+        ? sender.url
+        : validUrl(sender.tab?.url)
+          ? sender.tab.url
+          : undefined;
       return request({
         type: "download",
         url: message.url,
         kind: message.kind === "media" ? "media" : "file",
         filename: message.filename,
-        page:
-          validUrl(sender.tab?.url) && !sender.tab?.incognito
-            ? sender.tab.url
-            : undefined,
+        page: sourceUrl && !sender.tab?.incognito ? sourceUrl : undefined,
         tabId: sender.tab?.id,
         frameId: sender.frameId,
         headers: {
           "User-Agent": globalThis.navigator.userAgent,
-          ...(validUrl(sender.tab?.url) ? { Referer: sender.tab.url } : {}),
+          ...(sourceUrl ? { Referer: sourceUrl } : {}),
           ...(message.headers || {}),
         },
         includeSiteCookies: message.includeSiteCookies,
@@ -895,7 +914,11 @@ api.runtime.onMessage.addListener((message, sender, respond) => {
     }
     throw new Error("Unsupported extension action.");
   })().then(respond, (error) =>
-    respond({ success: false, error: error.message }),
+    respond({
+      success: false,
+      error: error.message,
+      ambiguous: Boolean(error.ambiguous),
+    }),
   );
   return true;
 });
