@@ -106,7 +106,8 @@ function click(link) {
     altKey: false,
     shiftKey: false,
     target: {
-      closest: (selector) => selector === "a[href]" ? link : null,
+      closest: (selector) =>
+        selector === "a[href],button,[role='button']" ? link : null,
     },
     preventDefault() { this.defaultPrevented = true; },
   };
@@ -176,6 +177,28 @@ test("download-labelled links without a download attribute are captured", async 
   assert.equal(event.defaultPrevented, true);
   assert.equal(f.messages[0].type, "download");
   assert.equal(f.messages[0].url, anchor.href);
+});
+
+test("download buttons with an exposed data URL are captured before their page handler", async () => {
+  const button = {
+    href: "",
+    download: "",
+    textContent: "Download generated image",
+    hasAttribute: () => false,
+    getAttribute: (name) => ({
+      "data-download-url": "https://cdn.example.test/generated/image.png",
+      "data-filename": "generated.png",
+    })[name] || null,
+  };
+  const f = fixture();
+  await new Promise(setImmediate);
+  const event = click(button);
+  f.listeners.click(event);
+  await new Promise(setImmediate);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(f.messages[0].type, "download");
+  assert.equal(f.messages[0].url, "https://cdn.example.test/generated/image.png");
+  assert.equal(f.messages[0].filename, "generated.png");
 });
 
 test("definitive desktop rejection falls back through the browser download API", async () => {

@@ -108,9 +108,10 @@
       )
         return;
       const path = event.composedPath?.() || [];
+      const selector = "a[href],button,[role='button']";
       const link =
-        path.find((node) => node?.matches?.("a[href]")) ||
-        event.target?.closest?.("a[href]");
+        path.find((node) => node?.matches?.(selector)) ||
+        event.target?.closest?.(selector);
       if (!link) return;
       const downloadAttribute = Boolean(link.hasAttribute?.("download"));
       const label = [
@@ -118,15 +119,23 @@
         link.getAttribute?.("aria-label"),
         link.getAttribute?.("title"),
         link.getAttribute?.("data-testid"),
+        link.getAttribute?.("data-action"),
       ].filter(Boolean).join(" ").slice(0, 320);
       if (
         !downloadAttribute &&
         !/\b(?:download|export|save(?:\s+(?:file|image|video|audio|original))?)\b/i.test(label)
       )
         return;
+      const href =
+        link.href ||
+        link.getAttribute?.("data-download-url") ||
+        link.getAttribute?.("data-url") ||
+        link.getAttribute?.("data-href") ||
+        link.getAttribute?.("href");
+      if (!href) return;
       let target;
       try {
-        target = new URL(link.href, location.href);
+        target = new URL(href, location.href);
       } catch {
         return;
       }
@@ -138,7 +147,11 @@
         return;
       const url = target.href;
       const filename = String(
-        link.download || link.getAttribute?.("download") || "",
+        link.download ||
+        link.getAttribute?.("download") ||
+        link.getAttribute?.("data-filename") ||
+        link.getAttribute?.("data-name") ||
+        "",
       ).trim().slice(0, 220);
       event.preventDefault();
       if (isBlob) {
