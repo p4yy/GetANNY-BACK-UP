@@ -2,79 +2,178 @@
   const api = globalThis.browser || globalThis.chrome;
   const pref = globalThis.GetANNYDownloadPreferences;
   let extensionEnabled = false;
+  let captureDownloads = false;
+  let preferenceRead = 0;
+  const seen = new Set();
+  const observedMedia = new Map();
+  const socialLinks = new Set();
+
+  const refreshCapture = async () => {
+    const read = ++preferenceRead;
+    captureDownloads = false;
+    try {
+      const settings = await pref.get(api, location.href);
+      if (read === preferenceRead)
+        captureDownloads = settings.automatic && !settings.keepInBrowser;
+    } catch {
+      /* Leave downloads in the browser when preferences are unavailable. */
+    }
+  };
+
   void api.storage.local.get([pref.enabledKey]).then((data) => {
     extensionEnabled = data[pref.enabledKey] !== false;
     if (extensionEnabled) scan();
   }).catch(() => { extensionEnabled = false; });
+  void refreshCapture();
+
   api.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local" || !changes[pref.enabledKey]) return;
-    extensionEnabled = changes[pref.enabledKey].newValue !== false;
-    if (extensionEnabled) scan();
+    if (area !== "local") return;
+    if (changes[pref.enabledKey]) {
+      extensionEnabled = changes[pref.enabledKey].newValue !== false;
+      if (extensionEnabled) scan();
+    }
+    if (
+      changes[pref.enabledKey] ||
+      changes[pref.automaticKey] ||
+      changes[pref.siteKey("keep", location.href)]
+    )
+      void refreshCapture();
   });
-  const seen = new Set();
-  // Keep a bounded independent record: the background can lose initial
-  // reports during tab navigation or service-worker restoration.
-  const observedMedia = new Map();
-  const socialLinks = new Set();
-  if (globalThis.GetANNYSiteDownloads.providerFor(location.href)) {
-    let captureDownloads = false;
-    let preferenceRead = 0;
-    const refreshCapture = async () => {
-      const read = ++preferenceRead;
-      captureDownloads = false;
-      try {
-        const { automatic, keepInBrowser } = await globalThis.GetANNYDownloadPreferences.get(api, location.href);
-        if (read === preferenceRead) captureDownloads = automatic && !keepInBrowser;
-      } catch {
-        /* Leave downloads in the browser when settings are unavailable. */
-      }
-    };
-    void refreshCapture();
-    api.storage?.onChanged?.addListener((changes, area) => {
-      const prefs = globalThis.GetANNYDownloadPreferences;
-      if (area === "local" && (changes[prefs.enabledKey] || changes[prefs.automaticKey] || changes[prefs.siteKey("keep", location.href)]))
-        void refreshCapture();
-    });
-    document.addEventListener(
-      "click",
-      (event) => {
-        if (
-          !captureDownloads ||
-          !event.isTrusted ||
-          event.defaultPrevented ||
-          event.button !== 0 ||
-          event.ctrlKey ||
-          event.metaKey ||
-          event.altKey ||
-          event.shiftKey
-        )
-          return;
-        const link = event.target.closest?.("a[download]");
-        if (!link || !link.href.startsWith("blob:")) return;
-        const url = new URL(link.href);
-        if (url.origin !== location.origin) return;
-        event.preventDefault();
-        let browserBlob;
-        transferBlob(url.href, link.download || "browser-file", (blob) => { browserBlob = blob; }).catch(() => {
-          // A rejected or oversized payload is still available to the browser.
-          const native = document.createElement("a");
-          const fallbackUrl = browserBlob && URL.createObjectURL?.(browserBlob);
-          native.href = fallbackUrl || url.href;
-          native.download = link.download || "browser-file";
-          document.body.append(native);
-          native.click();
-          native.remove();
-          if (fallbackUrl) setTimeout(() => URL.revokeObjectURL(fallbackUrl), 30000);
-        });
-      },
-      true,
-    );
+
+  function responseError(response, fallback) {
+    const error = new Error(response?.error || fallback);
+    if (response?.ambiguous) error.ambiguous = true;
+    return error;
   }
+
+  async function downloadInBrowser(url, filename) {
+    const response = await api.runtime.sendMessage({
+      type: "browser-download-fallback",
+      url,
+      filename,
+    });
+    if (!response || response.success === false)
+      throw responseError(response, "The browser could not start this download.");
+    return response;
+  }
+
+  function fallbackAnchor(url, filename, blob) {
+    const native = document.createElement("a");
+    const fallbackUrl = blob && URL.createObjectURL?.(blob);
+    native.href = fallbackUrl || url;
+    native.download = filename || "browser-file";
+    native.rel = "noopener";
+    document.body.append(native);
+    native.click();
+    native.remove();
+    if (fallbackUrl) setTimeout(() => URL.revokeObjectURL(fallbackUrl), 30000);
+  }
+
+  async function captureDownloadLink(url, filename) {
+    const settings = await pref.get(api, location.href, url);
+    if (
+      !settings.automatic ||
+      settings.keepInBrowser ||
+      globalThis.GetANNYSiteDownloads.prefersBrowser(
+        location.href,
+        url,
+        settings.includeSiteCookies,
+      )
+    ) {
+      await downloadInBrowser(url, filename);
+      return;
+    }
+    const response = await api.runtime.sendMessage({
+      type: "download",
+      url,
+      kind: "file",
+      filename,
+    });
+    if (!response || response.success === false)
+      throw responseError(response, "GetANNY did not accept this download.");
+  }
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (
+        !captureDownloads ||
+        !event.isTrusted ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey
+      )
+        return;
+      const path = event.composedPath?.() || [];
+      const link =
+        path.find((node) => node?.matches?.("a[href]")) ||
+        event.target?.closest?.("a[href]");
+      if (!link) return;
+      const downloadAttribute = Boolean(link.hasAttribute?.("download"));
+      const label = [
+        link.textContent,
+        link.getAttribute?.("aria-label"),
+        link.getAttribute?.("title"),
+        link.getAttribute?.("data-testid"),
+      ].filter(Boolean).join(" ").slice(0, 320);
+      if (
+        !downloadAttribute &&
+        !/\b(?:download|export|save(?:\s+(?:file|image|video|audio|original))?)\b/i.test(label)
+      )
+        return;
+      let target;
+      try {
+        target = new URL(link.href, location.href);
+      } catch {
+        return;
+      }
+      const isBlob = target.protocol === "blob:";
+      if (
+        (isBlob && target.origin !== location.origin) ||
+        (!isBlob && !["http:", "https:"].includes(target.protocol))
+      )
+        return;
+      const url = target.href;
+      const filename = String(
+        link.download || link.getAttribute?.("download") || "",
+      ).trim().slice(0, 220);
+      event.preventDefault();
+      if (isBlob) {
+        let browserBlob;
+        void transferBlob(url, filename || "browser-file", (blob) => {
+          browserBlob = blob;
+        }).catch((error) => {
+          if (error.ambiguous) return;
+          try {
+            fallbackAnchor(url, filename, browserBlob);
+          } catch {
+            /* The original page still owns the blob URL. */
+          }
+        });
+      } else {
+        void captureDownloadLink(url, filename).catch(async (error) => {
+          if (error.ambiguous) return;
+          try {
+            await downloadInBrowser(url, filename);
+          } catch {
+            try {
+              fallbackAnchor(url, filename);
+            } catch {
+              /* The site may have invalidated the original download link. */
+            }
+          }
+        });
+      }
+    },
+    true,
+  );
 
   async function transferBlob(url, filename, onRead) {
     const response = await fetch(url);
     if (!response.ok) throw new Error("Browser file is no longer available.");
-    // Blob URLs often omit Content-Length; check the actual Blob before upload.
     const declared = response.headers.get("content-length");
     if (declared !== null) {
       const reported = Number(declared);
@@ -96,7 +195,7 @@
         ...message,
       });
       if (!result || result.success === false)
-        throw new Error(result?.error || "Desktop unavailable.");
+        throw responseError(result, "Desktop unavailable.");
       return result;
     };
     const { uploadId } = await send({
