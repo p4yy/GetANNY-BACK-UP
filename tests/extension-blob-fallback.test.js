@@ -5,15 +5,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
-test("blob handoff falls back to a native browser download with numeric timer handles", async () => {
+function fixture({ sendMessage, automatic = true } = {}) {
   const source = fs.readFileSync("src/extension/content.js", "utf8");
-  let clickHandler;
+  const listeners = {};
+  const messages = [];
   const timers = [];
   const appended = [];
-  const anchor = {
-    href: "blob:https://site.test/file-id",
-    download: "clip.bin",
-  };
   const fallback = {
     href: "",
     download: "",
@@ -31,15 +28,20 @@ test("blob handoff falls back to a native browser download with numeric timer ha
     },
     runtime: {
       id: "getanny-browser-test",
-      sendMessage: () => Promise.reject(new Error("desktop unavailable")),
+      sendMessage(message) {
+        messages.push(message);
+        return sendMessage
+          ? sendMessage(message)
+          : Promise.resolve({ success: true, action: "queued" });
+      },
       onMessage: { addListener() {} },
     },
   };
   const document = {
-    title: "Blob fallback fixture",
+    title: "Download interception fixture",
     documentElement: {},
     addEventListener(type, listener) {
-      if (type === "click") clickHandler = listener;
+      listeners[type] = listener;
     },
     createElement(tag) {
       assert.equal(tag, "a");
@@ -53,20 +55,27 @@ test("blob handoff falls back to a native browser download with numeric timer ha
   vm.runInNewContext(source, {
     globalThis: {
       browser: api,
-      GetANNYSiteDownloads: { providerFor: () => true },
+      GetANNYSiteDownloads: {
+        providerFor: () => false,
+        prefersBrowser: () => false,
+      },
       GetANNYSocialLinks: { socialSite: () => false },
       GetANNYDownloadPreferences: {
         enabledKey: "getannyExtensionEnabled",
-        automaticKey: "getannyAutomaticCapture",
+        automaticKey: "getannyAutomaticHandoff",
         siteKey: () => "keep-site",
-        get: async () => ({ automatic: true, keepInBrowser: false }),
+        get: async () => ({
+          automatic,
+          keepInBrowser: false,
+          includeSiteCookies: true,
+        }),
       },
     },
     window,
     document,
     location: {
-      href: "https://site.test/download",
-      origin: "https://site.test",
+      href: "https://unlisted-site.example/downloads",
+      origin: "https://unlisted-site.example",
     },
     Element: class Element {},
     MutationObserver: class { observe() {} },
@@ -84,10 +93,11 @@ test("blob handoff falls back to a native browser download with numeric timer ha
     },
     clearTimeout() {},
   });
-  await new Promise(setImmediate);
-  assert.equal(typeof clickHandler, "function");
+  return { listeners, messages, timers, appended, fallback };
+}
 
-  const event = {
+function click(link) {
+  return {
     isTrusted: true,
     defaultPrevented: false,
     button: 0,
@@ -95,19 +105,120 @@ test("blob handoff falls back to a native browser download with numeric timer ha
     metaKey: false,
     altKey: false,
     shiftKey: false,
-    target: { closest: (selector) => selector === "a[download]" ? anchor : null },
+    target: {
+      closest: (selector) => selector === "a[href]" ? link : null,
+    },
     preventDefault() { this.defaultPrevented = true; },
   };
-  clickHandler(event);
+}
+
+test("same-origin blob download on an unlisted website falls back safely when desktop is unavailable", async () => {
+  const anchor = {
+    href: "blob:https://unlisted-site.example/file-id",
+    download: "clip.bin",
+    textContent: "Download",
+    hasAttribute: (name) => name === "download",
+    getAttribute: () => "clip.bin",
+  };
+  const f = fixture({
+    sendMessage: () => Promise.reject(new Error("desktop unavailable")),
+  });
+  await new Promise(setImmediate);
+  const event = click(anchor);
+  f.listeners.click(event);
   await new Promise(setImmediate);
 
   assert.equal(event.defaultPrevented, true);
-  assert.deepEqual(appended, [fallback]);
-  assert.match(fallback.href, /^blob:/);
-  assert.equal(fallback.download, "clip.bin");
-  assert.equal(fallback.clicked, 1);
-  assert.equal(fallback.removed, true);
-  assert.equal(timers.length, 1);
-  assert.equal(timers[0].milliseconds, 30000);
-  timers[0].callback();
+  assert.deepEqual(f.appended, [f.fallback]);
+  assert.match(f.fallback.href, /^blob:/);
+  assert.equal(f.fallback.download, "clip.bin");
+  assert.equal(f.fallback.clicked, 1);
+  assert.equal(f.fallback.removed, true);
+  assert.equal(f.timers.length, 1);
+  assert.equal(f.timers[0].milliseconds, 30000);
+  f.timers[0].callback();
+});
+
+test("direct download links are handed to GetANNY before the browser starts", async () => {
+  const anchor = {
+    href: "https://cdn.example.test/files/archive.zip?token=abc",
+    download: "archive.zip",
+    textContent: "",
+    hasAttribute: (name) => name === "download",
+    getAttribute: (name) => name === "download" ? "archive.zip" : null,
+  };
+  const f = fixture();
+  await new Promise(setImmediate);
+  const event = click(anchor);
+  f.listeners.click(event);
+  await new Promise(setImmediate);
+
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(f.messages.map((message) => message.type), ["download"]);
+  assert.equal(f.messages[0].url, anchor.href);
+  assert.equal(f.messages[0].filename, "archive.zip");
+  assert.equal(f.messages[0].kind, "file");
+});
+
+test("download-labelled links without a download attribute are captured", async () => {
+  const anchor = {
+    href: "https://files.example.test/export?id=42",
+    download: "",
+    textContent: "Download generated file",
+    hasAttribute: () => false,
+    getAttribute: (name) => name === "aria-label" ? "Download generated file" : null,
+  };
+  const f = fixture();
+  await new Promise(setImmediate);
+  const event = click(anchor);
+  f.listeners.click(event);
+  await new Promise(setImmediate);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(f.messages[0].type, "download");
+  assert.equal(f.messages[0].url, anchor.href);
+});
+
+test("definitive desktop rejection falls back through the browser download API", async () => {
+  const anchor = {
+    href: "https://cdn.example.test/files/archive.zip",
+    download: "archive.zip",
+    textContent: "",
+    hasAttribute: (name) => name === "download",
+    getAttribute: (name) => name === "download" ? "archive.zip" : null,
+  };
+  const f = fixture({
+    sendMessage: (message) => Promise.resolve(
+      message.type === "download"
+        ? { success: false, error: "server refused" }
+        : { success: true, browserManaged: true },
+    ),
+  });
+  await new Promise(setImmediate);
+  const event = click(anchor);
+  f.listeners.click(event);
+  await new Promise(setImmediate);
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(
+    f.messages.map((message) => message.type),
+    ["download", "browser-download-fallback"],
+  );
+  assert.equal(f.messages[1].url, anchor.href);
+  assert.equal(f.messages[1].filename, "archive.zip");
+});
+
+test("manual capture mode leaves explicit download links untouched", async () => {
+  const anchor = {
+    href: "https://cdn.example.test/files/archive.zip",
+    download: "archive.zip",
+    textContent: "",
+    hasAttribute: (name) => name === "download",
+    getAttribute: (name) => name === "download" ? "archive.zip" : null,
+  };
+  const f = fixture({ automatic: false });
+  await new Promise(setImmediate);
+  const event = click(anchor);
+  f.listeners.click(event);
+  await new Promise(setImmediate);
+  assert.equal(event.defaultPrevented, false);
+  assert.deepEqual(f.messages, []);
 });
