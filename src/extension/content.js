@@ -113,7 +113,10 @@
         path.find((node) => node?.matches?.(selector)) ||
         event.target?.closest?.(selector);
       if (!link) return;
-      const downloadAttribute = Boolean(link.hasAttribute?.("download"));
+      const downloadAttribute = Boolean(
+        link.hasAttribute?.("download") ||
+        (typeof link.download === "string" && link.download.length > 0),
+      );
       const label = [
         link.textContent,
         link.getAttribute?.("aria-label"),
