@@ -18,7 +18,7 @@ test("native GetANNY bootstrap upgrades to direct credential only after durable 
 test("browser download handoff supports explicit links from any HTTP(S) page", () => {
   const background = fs.readFileSync("src/extension/background.js", "utf8");
   const content = fs.readFileSync("src/extension/content.js", "utf8");
-  assert.match(content, /document\.addEventListener\([\s\S]*"a\[href\]"/);
+  assert.match(content, /document\.addEventListener\([\s\S]*"a\[href\],button/);
   assert.match(content, /type: "browser-download-fallback"/);
   assert.match(background, /message\.type === "browser-download-fallback"/);
   assert.match(background, /api\.downloads\.download\(options\)/);
