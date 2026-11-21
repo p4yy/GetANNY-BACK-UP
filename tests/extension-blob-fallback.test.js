@@ -82,6 +82,7 @@ function fixture({ sendMessage, automatic = true } = {}) {
     Node: { ELEMENT_NODE: 1 },
     URL,
     Blob,
+    btoa: (binary) => Buffer.from(binary, "binary").toString("base64"),
     fetch: async () => ({
       ok: true,
       headers: { get: () => null },
