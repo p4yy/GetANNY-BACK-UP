@@ -96,9 +96,9 @@ function fixture({ sendMessage, automatic = true } = {}) {
   return { listeners, messages, timers, appended, fallback };
 }
 
-function click(link) {
+function click(link, isTrusted = true) {
   return {
-    isTrusted: true,
+    isTrusted,
     defaultPrevented: false,
     button: 0,
     ctrlKey: false,
@@ -199,6 +199,44 @@ test("download buttons with an exposed data URL are captured before their page h
   assert.equal(f.messages[0].type, "download");
   assert.equal(f.messages[0].url, "https://cdn.example.test/generated/image.png");
   assert.equal(f.messages[0].filename, "generated.png");
+});
+
+test("a trusted AI download button authorizes its generated synthetic blob link", async () => {
+  const f = fixture({
+    sendMessage: (message) => Promise.resolve(
+      message.action === "begin"
+        ? { success: true, uploadId: "upload-1" }
+        : { success: true },
+    ),
+  });
+  await new Promise(setImmediate);
+  const button = {
+    href: "",
+    textContent: "Download generated video",
+    hasAttribute: () => false,
+    getAttribute: () => null,
+  };
+  const intent = click(button, true);
+  f.listeners.click(intent);
+  assert.equal(intent.defaultPrevented, false);
+
+  const anchor = {
+    href: "blob:https://unlisted-site.example/generated-id",
+    download: "generated.mp4",
+    textContent: "",
+    hasAttribute: (name) => name === "download",
+    getAttribute: (name) => name === "download" ? "generated.mp4" : null,
+  };
+  const generated = click(anchor, false);
+  f.listeners.click(generated);
+  await new Promise(setImmediate);
+
+  assert.equal(generated.defaultPrevented, true);
+  assert.deepEqual(
+    f.messages.map((message) => message.action),
+    ["begin", "chunk", "finish"],
+  );
+  assert.equal(f.messages[0].filename, "generated.mp4");
 });
 
 test("definitive desktop rejection falls back through the browser download API", async () => {

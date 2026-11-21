@@ -4,6 +4,7 @@
   let extensionEnabled = false;
   let captureDownloads = false;
   let preferenceRead = 0;
+  let lastDownloadGestureAt = 0;
   const seen = new Set();
   const observedMedia = new Map();
   const socialLinks = new Set();
@@ -98,7 +99,6 @@
     (event) => {
       if (
         !captureDownloads ||
-        !event.isTrusted ||
         event.defaultPrevented ||
         event.button !== 0 ||
         event.ctrlKey ||
@@ -121,18 +121,27 @@
         link.getAttribute?.("data-testid"),
         link.getAttribute?.("data-action"),
       ].filter(Boolean).join(" ").slice(0, 320);
-      if (
-        !downloadAttribute &&
-        !/\b(?:download|export|save(?:\s+(?:file|image|video|audio|original))?)\b/i.test(label)
-      )
-        return;
+      const downloadIntent =
+        downloadAttribute ||
+        /\b(?:download|export|save(?:\s+(?:file|image|video|audio|original))?)\b/i.test(label);
+      if (!downloadIntent) return;
+      const trusted = event.isTrusted === true;
+      const recentGesture =
+        !trusted && Date.now() - lastDownloadGestureAt <= 10000;
+      if (!trusted && !recentGesture) return;
       const href =
         link.href ||
         link.getAttribute?.("data-download-url") ||
         link.getAttribute?.("data-url") ||
         link.getAttribute?.("data-href") ||
         link.getAttribute?.("href");
-      if (!href) return;
+      if (!href) {
+        // AI sites often create and click a temporary blob anchor after the
+        // user activates a Download button. Keep a short-lived user-intent
+        // marker so that synthetic anchor click can be captured as well.
+        if (trusted) lastDownloadGestureAt = Date.now();
+        return;
+      }
       let target;
       try {
         target = new URL(href, location.href);
@@ -154,6 +163,7 @@
         "",
       ).trim().slice(0, 220);
       event.preventDefault();
+      if (recentGesture) lastDownloadGestureAt = 0;
       if (isBlob) {
         let browserBlob;
         void transferBlob(url, filename || "browser-file", (blob) => {
