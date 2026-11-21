@@ -29,7 +29,7 @@
       actionable.getAttribute?.("title"),
       actionable.getAttribute?.("data-testid"),
     ].filter(Boolean).join(" ").slice(0, 320);
-    return /\\b(?:download|export|save(?:\\s+(?:file|image|video|audio|original))?)\\b/i.test(label);
+    return /\b(?:download|export|save(?:\s+(?:file|image|video|audio|original))?)\b/i.test(label);
   };
   document.addEventListener("click", (event) => {
     if (enabled && event.isTrusted === true && labelMatches(event.target))
