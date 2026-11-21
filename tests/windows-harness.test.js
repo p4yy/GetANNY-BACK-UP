@@ -41,7 +41,7 @@ test("Windows branded Setup harness waits for async uninstall and CI collects se
   assert.match(assembly, /\$expectedInstaller = 'Dark WPF setup shell with embedded NSIS x64 engine'/);
   assert.match(assembly, /\$overall\.installer -cne \$expectedInstaller/);
   assert.match(assembly, /\$expectedBrowserScope = 'Extension source regression tests run in the browser-handoff workflow gate; real-browser matrix remains owner validation\.'/);
-  assert.match(assembly, /\$overall\.sourceCommit -ne \$env\.GITHUB_SHA/);
+  assert.match(assembly, /\$overall\.sourceCommit -ne \$env:GITHUB_SHA/);
   assert.match(assembly, /installerWrapper\.wrapped/);
   assert.match(assembly, /installerWrapper\.engineBytes/);
   assert.match(assembly, /uninstallerShell\.customWpf/);
