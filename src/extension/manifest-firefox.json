@@ -20,21 +20,75 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["download-preferences.js", "overlay-preferences.js", "social-links.js", "site-downloads.js", "content.js", "injector.js"],
+      "matches": [
+        "https://*.chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://*.claude.ai/*",
+        "https://*.perplexity.ai/*",
+        "https://*.suno.com/*",
+        "https://*.suno.ai/*",
+        "https://gemini.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://copilot.microsoft.com/*",
+        "https://designer.microsoft.com/*",
+        "https://*.deepseek.com/*",
+        "https://*.grok.com/*",
+        "https://*.mistral.ai/*",
+        "https://*.meta.ai/*",
+        "https://*.midjourney.com/*",
+        "https://firefly.adobe.com/*",
+        "https://*.runwayml.com/*",
+        "https://*.klingai.com/*",
+        "https://*.pika.art/*",
+        "https://*.lumalabs.ai/*",
+        "https://*.ideogram.ai/*",
+        "https://*.leonardo.ai/*",
+        "https://*.elevenlabs.io/*",
+        "https://*.higgsfield.ai/*",
+        "https://*.krea.ai/*",
+        "https://*.pixverse.ai/*",
+        "https://*.hailuoai.video/*",
+        "https://*.openart.ai/*",
+        "https://*.canva.com/*",
+        "https://*.freepik.com/*"
+      ],
+      "js": [
+        "generated-blob-main.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "download-preferences.js",
+        "overlay-preferences.js",
+        "social-links.js",
+        "site-downloads.js",
+        "content.js",
+        "injector.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true,
       "match_about_blank": true
     }
   ],
   "manifest_version": 2,
-  "web_accessible_resources": ["icons/icon48.png"],
+  "web_accessible_resources": [
+    "icons/icon48.png"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "getanny@getanny.app",
       "strict_min_version": "128.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   },

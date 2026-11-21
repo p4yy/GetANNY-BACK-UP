@@ -14,8 +14,10 @@
     captureDownloads = false;
     try {
       const settings = await pref.get(api, location.href);
-      if (read === preferenceRead)
+      if (read === preferenceRead) {
         captureDownloads = settings.automatic && !settings.keepInBrowser;
+        notifyGeneratedBlobCapture?.();
+      }
     } catch {
       /* Leave downloads in the browser when preferences are unavailable. */
     }
@@ -26,6 +28,48 @@
     if (extensionEnabled) scan();
   }).catch(() => { extensionEnabled = false; });
   void refreshCapture();
+
+  // Main-world page scripts can create and click detached Blob anchors. Their
+  // clicks never bubble into a content script. This bridge passes only the Blob
+  // URL and filename; the actual bytes still travel through browser-payload.
+  const generatedBlobType = "getanny:generated-blob";
+  const notifyGeneratedBlobCapture = () => {
+    if (typeof window.postMessage !== "function") return;
+    window.postMessage({
+      type: generatedBlobType + ":enable",
+      enabled: captureDownloads,
+    }, location.origin);
+  };
+  if (globalThis.GetANNYSiteDownloads.providerFor(location.href) &&
+      typeof window.addEventListener === "function") {
+    window.addEventListener("message", (event) => {
+      if (event.source !== window || event.origin !== location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== generatedBlobType ||
+          typeof data.id !== "string" || data.id.length > 80) return;
+      const ack = (state, extra = {}) => window.postMessage({
+        type: generatedBlobType + ":ack", id: data.id, state, ...extra,
+      }, location.origin);
+      let url;
+      try { url = new URL(data.url); } catch { ack("complete", { accepted: false }); return; }
+      if (!captureDownloads || url.protocol !== "blob:" ||
+          url.origin !== location.origin ||
+          Date.now() - lastDownloadGestureAt > 30000) {
+        ack("complete", { accepted: false });
+        return;
+      }
+      const filename = typeof data.filename === "string"
+        ? data.filename.slice(0, 220) : "browser-file";
+      lastDownloadGestureAt = 0;
+      ack("received");
+      void transferBlob(url.href, filename, () => {}).then(
+        () => ack("complete", { accepted: true }),
+        (error) => ack("complete", {
+          accepted: false, ambiguous: Boolean(error.ambiguous),
+        }),
+      );
+    });
+  }
 
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
@@ -139,9 +183,8 @@
         link.getAttribute?.("data-href") ||
         link.getAttribute?.("href");
       if (!href) {
-        // AI sites often create and click a temporary blob anchor after the
-        // user activates a Download button. Keep a short-lived user-intent
-        // marker so that synthetic anchor click can be captured as well.
+        // AI sites often generate detached Blob links after this button click.
+        // The MAIN-world bridge and isolated listener share this gesture window.
         if (trusted) lastDownloadGestureAt = Date.now();
         return;
       }

@@ -16,6 +16,7 @@ const files = [
   "social-links.js",
   "site-downloads.js",
   "content.js",
+  "generated-blob-main.js",
   "injector.js",
   "config.js",
   "popup.html",

@@ -18,8 +18,58 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["download-preferences.js", "overlay-preferences.js", "social-links.js", "site-downloads.js", "content.js", "injector.js"],
+      "matches": [
+        "https://*.chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://*.claude.ai/*",
+        "https://*.perplexity.ai/*",
+        "https://*.suno.com/*",
+        "https://*.suno.ai/*",
+        "https://gemini.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://copilot.microsoft.com/*",
+        "https://designer.microsoft.com/*",
+        "https://*.deepseek.com/*",
+        "https://*.grok.com/*",
+        "https://*.mistral.ai/*",
+        "https://*.meta.ai/*",
+        "https://*.midjourney.com/*",
+        "https://firefly.adobe.com/*",
+        "https://*.runwayml.com/*",
+        "https://*.klingai.com/*",
+        "https://*.pika.art/*",
+        "https://*.lumalabs.ai/*",
+        "https://*.ideogram.ai/*",
+        "https://*.leonardo.ai/*",
+        "https://*.elevenlabs.io/*",
+        "https://*.higgsfield.ai/*",
+        "https://*.krea.ai/*",
+        "https://*.pixverse.ai/*",
+        "https://*.hailuoai.video/*",
+        "https://*.openart.ai/*",
+        "https://*.canva.com/*",
+        "https://*.freepik.com/*"
+      ],
+      "js": [
+        "generated-blob-main.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "download-preferences.js",
+        "overlay-preferences.js",
+        "social-links.js",
+        "site-downloads.js",
+        "content.js",
+        "injector.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true,
       "match_about_blank": true
@@ -28,11 +78,19 @@
   "manifest_version": 3,
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2VdsmWCFSUPqmiLW4cPA98CEdv+oJRCR0TPz6nvQCz2t/tYcHAu+mfosLVfkiR99PpORcyxNqFTlg5YASYW6ZSCQZJLDN7cctoyFnhQ3bC6uhg8RpPNZsEbCg/19MqTRHaJTiu3wJk1iiwfDg00vYU1oAs1htpT3dwzM6LUTKj6O2nmHRXnWIV80B/ZMP480VPVGh34wz5+DIfpy73mnJWyByqofplUens5G66FQUv8Rr3cVNz0TffurXgIef7F/PtdV8F+g+YYdt1bU7GXq/3sc6ZPRKX5cEqswGYhno/J05i2RP1Q5ZTl9Eaa4odWzVaqLUXh2NRKHQdSJEF5zCQIDAQAB",
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon48.png"],
-      "matches": ["http://*/*", "https://*/*"]
+      "resources": [
+        "icons/icon48.png"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ],
   "background": {
